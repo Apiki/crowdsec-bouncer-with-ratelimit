@@ -2,6 +2,7 @@ from ratelimit import limits, RateLimitException
 from backoff import on_exception, expo
 import time, os, base64, requests, sys
 
+print("initing::::::::::::::::")
 try:  
    os.environ["LogFileName"]
    os.environ["gocacheToken"]
@@ -44,7 +45,7 @@ def call_api(line):
             base64_bytes=base64.b64encode(hashID.encode('ascii'))
             HASHCODE = base64_bytes.decode('ascii')
             response = requests.delete('https://api.gocache.com.br/v1/firewall/'+HASHCODE, headers=headers)
-    
+    print(l[1], l[2], response) 
     return response 
 
 while 1:
@@ -54,4 +55,4 @@ while 1:
         time.sleep(1)
         file.seek(where)
     else:
-        print(call_api(line)) # already has newline
+        call_api(line) # already has newline
