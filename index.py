@@ -18,16 +18,22 @@ st_results = os.stat(filename)
 st_size = st_results[6]
 file.seek(st_size)
 
+# Timeout (segundos) para chamadas a API GoCache. Sem isto, um request pendurado
+# bloqueia o loop indefinidamente (sk_wait_data) e o bouncer para de aplicar bans.
+HTTP_TIMEOUT = 10
 
 THIRTY_SECONDS = 30   # 45 hits max every 30 seconds
 @on_exception(expo, RateLimitException, max_tries=8)
 @limits(calls=45, period=THIRTY_SECONDS)
 def call_api(line):
-    if line is  None:
+    if line is None:
         return
 
     l = line.split(" ")
-    if l[1] is not None:
+    if len(l) < 3:
+        return
+    response = None
+    try:
         if 'add' == l[1]:
             headers = {
                 'GoCache-Token': os.environ['gocacheToken'],
@@ -36,7 +42,7 @@ def call_api(line):
                 'match[ip_address]': l[2],
                 'action[firewall]': 'block',
             }
-            response = requests.post('https://api.gocache.com.br/v1/firewall', data=payload, headers=headers)
+            response = requests.post('https://api.gocache.com.br/v1/firewall', data=payload, headers=headers, timeout=HTTP_TIMEOUT)
         if 'del' == l[1]:
             headers = {
                 'GoCache-Token': os.environ['gocacheToken'],
@@ -44,9 +50,12 @@ def call_api(line):
             hashID='ip_address-default|ip_address|'+l[2]+'|u'
             base64_bytes=base64.b64encode(hashID.encode('ascii'))
             HASHCODE = base64_bytes.decode('ascii')
-            response = requests.delete('https://api.gocache.com.br/v1/firewall/'+HASHCODE, headers=headers)
-    print(l[1], l[2], response) 
-    return response 
+            response = requests.delete('https://api.gocache.com.br/v1/firewall/'+HASHCODE, headers=headers, timeout=HTTP_TIMEOUT)
+    except requests.exceptions.RequestException as e:
+        print("ERRO", l[1], l[2], repr(e))
+        return None
+    print(l[1], l[2], response)
+    return response
 
 while 1:
     where = file.tell()
@@ -55,4 +64,7 @@ while 1:
         time.sleep(1)
         file.seek(where)
     else:
-        call_api(line) # already has newline
+        try:
+            call_api(line) # already has newline
+        except Exception as e:
+            print("LOOP-ERRO", repr(e))
